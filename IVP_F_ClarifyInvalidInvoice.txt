@@ -1,0 +1,373 @@
+a!localVariables(
+  local!relatedData: a!queryRecordType(
+    recordType: 'recordType!IVP Invoice',
+    pagingInfo: a!pagingInfo(1,100),
+    filters: a!queryFilter(
+      field: 'recordType!IVP Invoice.fields.id',
+      operator: "=",
+      value: ri!case.invoiceId
+    ),
+    fields: {
+      'recordType!IVP Invoice.relationships.OrderIds.relationships.Order',
+      'recordType!IVP Invoice.relationships.OrderIds.relationships.Order.relationships.Supplier',
+      'recordType!IVP Invoice.relationships.Supplier',
+      'recordType!IVP Invoice.relationships.Account',
+      'recordType!IVP Invoice.relationships.Supplier',
+    }
+  ).data,
+  local!invoiceAmountEqualsSumOfOrders: local!relatedData['recordType!IVP Invoice.fields.amount'] = sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice'])),
+  local!suppliersMatch: count(
+    union(
+      local!relatedData['recordType!IVP Invoice.fields.supplierId'],
+      tointeger(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.supplierId'])
+    )
+  ) = 1,
+  a!formLayout(
+    label: "Clarify Invalid Invoice",
+    instructions: "The following invoice shows a mismatch. Check the invoice and reply to the question below.",
+    contents: {
+      a!sectionLayout(
+        contents: {
+          a!columnsLayout(
+            columns: {
+              a!columnLayout(
+                contents: {
+                  a!sectionLayout(
+                    label: "Invoice",
+                    labelIcon: "money-wave-alt",
+                    contents: {
+                      a!textField(
+                        label: "Number",
+                        labelPosition: "JUSTIFIED",
+                        value: local!relatedData['recordType!IVP Invoice.fields.number'],
+                        readOnly: true
+                      ),
+                      a!richTextDisplayField(
+                        label: "Supplier",
+                        labelPosition: "JUSTIFIED",
+                        value: {
+                          a!richTextItem(
+                            text: local!relatedData['recordType!IVP Invoice.relationships.Supplier.fields.name'],
+                            color: if(local!suppliersMatch, "POSITIVE", "NEGATIVE"),
+                            style: if(local!suppliersMatch, "PLAIN", "STRONG")
+                          )
+                        }
+                      ),
+                      a!richTextDisplayField(
+                        label: "Amount",
+                        labelPosition: "JUSTIFIED",
+                        value: a!richTextItem(
+                          text: euro(local!relatedData['recordType!IVP Invoice.fields.amount']),
+                          color: if(
+                            local!relatedData['recordType!IVP Invoice.fields.amount'] = sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice'])),
+                            "POSITIVE",
+                            "NEGATIVE"
+                          ),
+                          style: if(
+                            local!relatedData['recordType!IVP Invoice.fields.amount'] = sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice'])),
+                            "PLAIN",
+                            "STRONG"
+                          )
+                        )
+                      ),
+                      a!paragraphField(
+                        label: "Description",
+                        labelPosition: "ABOVE",
+                        value: local!relatedData['recordType!IVP Invoice.fields.description'],
+                        readOnly: true
+                      )
+                    }
+                  ),
+                  a!sectionLayout(
+                    label: "Analysis",
+                    labelIcon: "search-dollar",
+                    contents: {
+                      a!cardLayout(
+                        contents: {
+                          a!sideBySideLayout(
+                            items: {
+                              a!sideBySideItem(
+                                item: a!richTextDisplayField(
+                                  labelPosition: "COLLAPSED",
+                                  value: {
+                                    a!richTextIcon(
+                                      icon: "check-circle",
+                                      showWhen: local!invoiceAmountEqualsSumOfOrders,
+                                      color: "POSITIVE",
+                                      size: "LARGE"
+                                    ),
+                                    a!richTextIcon(
+                                      icon: "exclamation-triangle",
+                                      showWhen: not(local!invoiceAmountEqualsSumOfOrders),
+                                      color: "NEGATIVE",
+                                      size: "LARGE"
+                                    )
+                                  }
+                                ),
+                                width: "MINIMIZE"
+                              ),
+                              a!sideBySideItem(
+                                item: a!richTextDisplayField(
+                                  labelPosition: "COLLAPSED",
+                                  value: {
+                                    a!richTextItem(
+                                      text: "Invoice amount and sum of orders match.",
+                                      showWhen: local!invoiceAmountEqualsSumOfOrders
+                                    ),
+                                    a!richTextItem(
+                                      text: "Invoice amount does not match sum of orders!",
+                                      showWhen: not(local!invoiceAmountEqualsSumOfOrders)
+                                    )
+                                  }
+                                )
+                              )
+                            },
+                            alignVertical: "MIDDLE"
+                          )
+                        },
+                        height: "AUTO",
+                        style: "NONE",
+                        marginBelow: "STANDARD",
+                        decorativeBarPosition: "START",
+                        decorativeBarColor: if(
+                          local!invoiceAmountEqualsSumOfOrders,
+                          "POSITIVE",
+                          "NEGATIVE"
+                        )
+                      ),
+                      a!cardLayout(
+                        contents: {
+                          a!sideBySideLayout(
+                            items: {
+                              a!sideBySideItem(
+                                item: a!richTextDisplayField(
+                                  labelPosition: "COLLAPSED",
+                                  value: {
+                                    a!richTextIcon(
+                                      icon: "check-circle",
+                                      showWhen: local!suppliersMatch,
+                                      color: "POSITIVE",
+                                      size: "LARGE"
+                                    ),
+                                    a!richTextIcon(
+                                      icon: "exclamation-triangle",
+                                      showWhen: not(local!suppliersMatch),
+                                      color: "NEGATIVE",
+                                      size: "LARGE"
+                                    )
+                                  }
+                                ),
+                                width: "MINIMIZE"
+                              ),
+                              a!sideBySideItem(
+                                item: a!richTextDisplayField(
+                                  labelPosition: "COLLAPSED",
+                                  value: {
+                                    a!richTextItem(
+                                      text: "Supplier in the invoice is the same as in the orders.",
+                                      showWhen: local!suppliersMatch
+                                    ),
+                                    a!richTextItem(
+                                      text: "Supplier in the invoice deviates from the orders.",
+                                      showWhen: not(local!suppliersMatch)
+                                    )
+                                  }
+                                )
+                              )
+                            },
+                            alignVertical: "MIDDLE"
+                          )
+                        },
+                        height: "AUTO",
+                        style: "NONE",
+                        marginBelow: "STANDARD",
+                        decorativeBarPosition: "START",
+                        decorativeBarColor: if(
+                          local!suppliersMatch,
+                          "POSITIVE",
+                          "NEGATIVE"
+                        )
+                      )
+                    },
+                    divider: "NONE"
+                  )
+                }
+              ),
+              a!columnLayout(
+                contents: {
+                  a!sectionLayout(
+                    label: "Orders",
+                    labelIcon: "clipboard-list",
+                    contents: {
+                      a!forEach(
+                        items: a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order']),
+                        expression: a!sectionLayout(
+                          contents: {
+                            a!textField(
+                              label: "Number",
+                              labelPosition: "JUSTIFIED",
+                              value: fv!item['recordType!IVP Order.fields.number'],
+                              readOnly: true
+                            ),
+                            a!pickerFieldUsers(
+                              label: "Created By",
+                              labelPosition: "JUSTIFIED",
+                              value: fv!item['recordType!IVP Order.fields.createdBy'],
+                              readOnly: true
+                            ),
+                            a!richTextDisplayField(
+                              label: "Supplier",
+                              labelPosition: "JUSTIFIED",
+                              value: a!richTextItem(
+                                text: fv!item['recordType!IVP Order.relationships.Supplier.fields.name'],
+                                color: if(
+                                  fv!item['recordType!IVP Order.relationships.Supplier.fields.id'] = local!relatedData['recordType!IVP Invoice.relationships.Supplier.fields.id'],
+                                  "POSITIVE",
+                                  "NEGATIVE"
+                                ),
+                                style: if(
+                                  fv!item['recordType!IVP Order.relationships.Supplier.fields.id'] = local!relatedData['recordType!IVP Invoice.relationships.Supplier.fields.id'],
+                                  "PLAIN",
+                                  "STRONG"
+                                )
+                              )
+                            ),
+                            a!paragraphField(
+                              label: "Description",
+                              labelPosition: "COLLAPSED",
+                              value: fv!item['recordType!IVP Order.fields.description'],
+                              height: "MEDIUM",
+                              readOnly: true
+                            ),
+                            a!sideBySideLayout(
+                              items: {
+                                a!sideBySideItem(
+                                  item: a!richTextDisplayField(
+                                    labelPosition: "COLLAPSED",
+                                    value: fv!item['recordType!IVP Order.fields.item']
+                                  )
+                                ),
+                                a!sideBySideItem(
+                                  item: a!richTextDisplayField(
+                                    labelPosition: "COLLAPSED",
+                                    value: euro(fv!item['recordType!IVP Order.fields.itemPrice']),
+                                    align: "RIGHT"
+                                  )
+                                ),
+                                a!sideBySideItem(
+                                  item: a!richTextDisplayField(
+                                    labelPosition: "COLLAPSED",
+                                    value: "qt " & fv!item['recordType!IVP Order.fields.quantity'],
+                                    align: "RIGHT"
+                                  ),
+                                  width: "MINIMIZE"
+                                ),
+                                a!sideBySideItem(
+                                  item: a!richTextDisplayField(
+                                    labelPosition: "COLLAPSED",
+                                    value: a!richTextItem(
+                                      text: euro(fv!item['recordType!IVP Order.fields.totalPrice']),
+                                      color: if(
+                                        fv!item['recordType!IVP Order.fields.itemPrice'] * fv!item['recordType!IVP Order.fields.quantity'] = fv!item['recordType!IVP Order.fields.totalPrice'],
+                                        "POSITIVE",
+                                        "NEGATIVE"
+                                      ),
+                                      style: if(
+                                        fv!item['recordType!IVP Order.fields.itemPrice'] * fv!item['recordType!IVP Order.fields.quantity'] = fv!item['recordType!IVP Order.fields.totalPrice'],
+                                        "PLAIN",
+                                        "STRONG"
+                                      )
+                                    ),
+                                    align: "RIGHT"
+                                  )
+                                )
+                              }
+                            )
+                          },
+                          divider: "BELOW"
+                        )
+                      ),
+                      a!sectionLayout(
+                        contents: {
+                          a!richTextDisplayField(
+                            labelPosition: "COLLAPSED",
+                            value: a!richTextItem(
+                              text: euro(sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice']))),
+                              color: if(
+                                local!relatedData['recordType!IVP Invoice.fields.amount'] = sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice'])),
+                                "POSITIVE",
+                                "NEGATIVE"
+                              ),
+                              style: if(
+                                local!relatedData['recordType!IVP Invoice.fields.amount'] = sum(a!flatten(local!relatedData['recordType!IVP Invoice.relationships.OrderIds.relationships.Order.fields.totalPrice'])),
+                                "PLAIN",
+                                "STRONG"
+                              )
+                            ),
+                            align: "RIGHT"
+                          )
+                        },
+                        divider: "ABOVE"
+                      )
+                    }
+                  )
+                }
+              )
+            },
+            showDividers: true
+          )
+        },
+        divider: "BELOW"
+      ),
+      a!sectionLayout(
+        label: "Requested Information",
+        labelIcon: "info",
+        contents: {
+          a!paragraphField(
+            label: "Request",
+            instructions: "",
+            value: ri!requestInfoComment,
+            saveInto: ri!requestInfoComment,
+            required: false,
+            readOnly: true
+          ),
+          a!radioButtonField(
+            label: "Resolution",
+            choiceLabels: {"Accept deviation", "Adjust invoice to sum of orders"},
+            choiceValues: {cons!IVP_RESOLUTION_ACCEPT, cons!IVP_RESOLUTION_ADJUST},
+            value: ri!resolution,
+            saveInto: ri!resolution,
+            required: true,
+            choiceStyle: "CARDS"
+          ),
+          a!paragraphField(
+            label: "Reply",
+            instructions: "",
+            value: ri!requestInfoReply,
+            saveInto: ri!requestInfoReply,
+            characterLimit: 4000,
+            required: true,
+            readOnly: false
+          )
+        },
+        showWhen: or(
+          not(local!invoiceAmountEqualsSumOfOrders),
+          not(local!suppliersMatch)
+        )
+      ),
+      rule!IVP_C_ThisHappensNext(
+        text: "The invoice will be checked again in context of your reply."
+      )
+    },
+    buttons: a!buttonLayout(
+      primaryButtons: {
+        a!buttonWidget(
+          label: "Reply",
+          icon: "reply",
+          submit: true,
+          style: "PRIMARY"
+        )
+      }
+    )
+  )
+)
