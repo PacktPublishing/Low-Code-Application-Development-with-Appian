@@ -1,0 +1,59 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Invoice Validation Process - OpenAPI",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://my_appian_demo.appiancloud.com/suite/webapi"
+    }
+  ],
+  "paths": {
+    "/ivp_post_invoice": {
+      "post": {
+        "description": "",
+        "operationId": "IVP Post Invoice",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              },
+              "example": {
+                "invoiceId": "123abc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "api_key": {
+        "type": "apiKey",
+        "name": "Appian-API-Key",
+        "in": "header"
+      },
+      "basic_auth": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  }
+}
