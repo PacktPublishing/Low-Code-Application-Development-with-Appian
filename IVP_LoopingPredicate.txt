@@ -12,7 +12,7 @@ a!localVariables(
       local!value: if(
         fv!item.field = ".",
         ri!item,
-        rule!PCO_DeepIndex(data: ri!item, path: fv!item.field, default: null)
+        rule!IVP_DeepIndex(data: ri!item, path: fv!item.field, default: null)
       ),
       local!filterValue: if(
         count(a!flatten(fv!item.value)) > 1,
