@@ -1,0 +1,56 @@
+IVP_LoopingPredicate
+
+Rule Inputs:
+- item (Any)
+- filters (Any)
+- operator (Text)
+
+a!localVariables(
+  local!result: a!forEach(
+    items: ri!filters,
+    expression: a!localVariables(
+      local!value: if(
+        fv!item.field = ".",
+        ri!item,
+        rule!PCO_DeepIndex(data: ri!item, path: fv!item.field, default: null)
+      ),
+      local!filterValue: if(
+        count(a!flatten(fv!item.value)) > 1,
+        cast(runtimetypeof({local!value}), fv!item.value),
+        cast(runtimetypeof(local!value), fv!item.value)
+      ),
+      choose(
+        lookup(
+          {"=", "<>", ">", ">=", "<", "<=", "between", "in", "not in", "is null", "not null", "starts with", "not starts with", "ends with", "not ends with", "includes", "not includes"},
+          fv!item.operator,
+          1
+        ),
+        /* = */ local!value = local!filterValue,
+        /* <> */ local!value <> local!filterValue,
+        /* > */ local!value > local!filterValue,
+        /* >= */ local!value >= local!filterValue,
+        /* < */ local!value < local!filterValue,
+        /* <= */ local!value <= local!filterValue,
+        /* between */ and(
+          local!value >= local!filterValue[1],
+          local!value <= local!filterValue[2]
+        ),
+        /* in */ contains(local!filterValue, local!value),
+        /* not in */ not(contains(local!filterValue, local!value)),
+        /* is null */ rule!PCO_IsVoid(value: local!value),
+        /* not null */ not(rule!PCO_IsVoid(value: local!value)),
+        /* starts with */ left(local!value, len(local!filterValue)) = local!filterValue,
+        /* not starts with */ left(local!value, len(local!filterValue)) <> local!filterValue,
+        /* ends with */ right(local!value, len(local!filterValue)) = local!filterValue,
+        /* not ends with */ right(local!value, len(local!filterValue)) <> local!filterValue,
+        /* includes */ like(local!value, "*" & local!filterValue & "*"),
+        /* not includes */ not(like(local!value, "*" & local!filterValue & "*")),
+      )
+    )
+  ),
+  if(
+    ri!operator = "OR",
+    or(local!result),
+    and(local!result)
+  )
+)
