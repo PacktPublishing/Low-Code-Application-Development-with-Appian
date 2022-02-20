@@ -1,0 +1,51 @@
+IVP_IsVoid
+
+Rule Inputs:
+- value (Any)
+
+if(
+  a!isNullOrEmpty(ri!value),
+  true,
+  a!localVariables(
+    local!typeNum: a!refreshVariable(
+      value: runtimetypeof(ri!value),
+      refreshAlways: true
+    ),
+    
+    /* Strings */
+    if(
+      local!typeNum = 'type!{http://www.appian.com/ae/types/2009}Text',
+      /* Ignore white space */
+      len(trim(ri!value)) = 0,
+      
+    /* List of Variant */
+    if(
+      local!typeNum = 'type!{http://www.appian.com/ae/types/2009}Variant?list',
+      all(a!isNullOrEmpty(_), a!flatten(ri!value)),
+      
+    /* Lists */
+    if(
+      /* Try to take first item in list and cast it to a list of itself */
+      /* then compare its datatype to the incoming data type */
+      local!typeNum = runtimetypeof(cast(runtimetypeof({index(ri!value, 1, null)}), ri!value)),
+      
+      /* Flatten takes care of lists in lists in lists in ... */
+      /* List has zero non-null items, length() already ignores null values*/
+      length(a!flatten(ri!value)) = 0,
+
+    /* DataSubsets or Maps returned by queryRecordType */
+    if(
+      or(
+        local!typeNum = 'type!{http://www.appian.com/ae/types/2009}DataSubset',
+        and(
+          local!typeNum = 'type!{http://www.appian.com/ae/types/2009}Map',
+          contains(a!keys(ri!value), "data"),
+        )
+      ),
+      a!isNullOrEmpty(ri!value.data),
+
+      /* No idea what this could be so it is considered to not be null */
+      false
+    ))))
+  )
+)
