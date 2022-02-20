@@ -1,0 +1,27 @@
+IVP_DeepIndex
+
+Rule Inputs:
+- data (Any)
+- path (Any)
+- default (Any)
+
+if(
+  isnull(ri!path),
+  ri!data,
+  reduce(
+    index(_,_,ri!default),
+    ri!data,
+    if(
+      runtimetypeof(ri!path) = 'type!{http://www.appian.com/ae/types/2009}Text',
+      a!forEach(
+        items: split(ri!path, "."),
+        expression: if(
+          exact(tostring(tointeger(fv!item)), fv!item),
+          tointeger(fv!item),
+          fv!item
+        )
+      ),
+      ri!path
+    )
+  )
+)
