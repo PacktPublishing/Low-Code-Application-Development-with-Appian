@@ -1,0 +1,1625 @@
+IVP_C_DisplayProcessReport
+
+Rule Inputs:
+- report (Document)
+- pageSize (Integer)
+- sort (List of SortInfo)
+- contextGroups (List of Groups)
+- contextProcessIds (List of Integer)
+- contextProcessModels (List of ProcessModel)
+- contextUsers (List of User)
+- query (Any)
+- label (Text)
+- emptyGridMessage (Text)
+- showWhen (Boolean)
+- shadeAlternateRows (Boolean)
+- spacing (Text)
+- height (Text)
+- borderStyle (Text)
+- taskLinkFunction (Any)
+- imageColumnSize (Text)
+- debug (Boolean)
+- recordDashboardFunction (Any)
+- instructions (Text)
+- processStatusLabels (List of Text)
+- taskStatusLabels (List of Text)
+- priorityLabels (List of Text)
+- ignoreColumns (List of Text)
+- refreshOnVarChange (Any)
+- accessibilityText (Text)
+- sortSaveInto (List of Save)
+- selectable (Boolean)
+- selectionStyle (Text)
+- selectionSaveInto (List of Save)
+- columnConfig (Any)
+- showReportColumnInfo (Boolean)
+- selectionValue (Any)
+- refreshInterval (Decimal)
+- showImplementationHelp (Boolean)
+- rowHeader (Integer)
+- validationGroup (Text)
+- selectionRequiredMessage (Text)
+- selectionRequired (Boolean)
+
+/*
+
+        HOWTO USE
+
+        Set parameter showImplementationHelp = true
+
+*/
+
+a!localVariables(
+  /* List of field types the component can handle */
+  local!fieldTypes: {
+    "NORMAL_TEXT",
+    "USER_NAME",
+    "DATE_TIME",
+    "DURATION",
+    "NUMBER",
+    "NUMBER_ROUNDED",
+    "DATE",
+    "TIME",
+    "BOOLEAN",
+    "PERCENTAGE",
+    "PROCESS_MODEL_NAME",
+    "PROCESS_STATUS",
+    "PROCESS_STATUS_ICON",
+    "TASK_STATUS",
+    "PRIORITY",
+    "PRIORITY_ICON",
+    "THRESHOLD",
+    "PROCESS_MODEL_VERSION",
+    "USER_PHOTO",
+    "GROUP_PROFILE",
+    "USER_OR_GROUP_NAME",
+    "USER_EMAIL",
+    "DOCUMENT_NAME",
+    "FOLDER_NAME",
+    "DOCUMENT_OR_FOLDER_NAME",
+    "IMAGE",
+  },
+  /* List of drill down types the component can handle */
+  local!drilldownTypes: {
+    "TASK_DETAILS",
+    "USER_PROFILE",
+    "DOCUMENT",
+    "DASHBOARD"
+  },
+  local!processStatuses: if(
+    count(ri!processStatusLabels) = 5,
+    ri!processStatusLabels,
+    {
+      "Active",
+      "Completed",
+      "Paused",
+      "Cancelled",
+      "Paused By Exception"
+    }
+  ),
+  local!taskStatuses: if(
+    count(ri!taskStatusLabels) = 12,
+    ri!taskStatusLabels,
+    {
+      "Assigned",
+      "Accepted",
+      "Completed",
+      "Not Started",
+      "Cancelled",
+      "Paused",
+      "Unattended",
+      "Aborted",
+      "Cancelled By Exception",
+      "Submitted",
+      "Running",
+      "Error"
+    }
+  ),
+  local!priorities: if(
+    count(ri!priorityLabels) = 3,
+    ri!priorityLabels,
+    {
+      "Low",
+      "Medium",
+      "High"
+    }
+  ),
+  /* Reset the start index if external filter fields are updated to prevent paging errors */
+  local!startIndex: a!refreshVariable(
+    value: 1,
+    refreshOnVarChange: {
+      ri!sort,
+      ri!refreshOnVarChange
+    }
+  ),
+  local!pInfo: a!refreshVariable(
+    value: a!pagingInfo(
+      startIndex: local!startIndex,
+      batchSize: if(isnull(ri!pageSize), 15, ri!pageSize),
+      sort: ri!sort
+    ),
+    refreshOnVarChange: {
+      local!startIndex,
+      ri!pageSize,
+      ri!sort
+    }
+  ),
+  local!data: a!refreshVariable(
+    value: if(
+      isnull(ri!report),
+      null,
+      a!queryProcessAnalytics(
+        report: ri!report,
+        contextGroups: ri!contextGroups,
+        contextProcessIds: ri!contextProcessIds,
+        contextProcessModels: ri!contextProcessModels,
+        contextUsers: ri!contextUsers,
+        query: if(
+          isnull(ri!query),
+          a!query(
+            pagingInfo: local!pInfo
+          ),
+          ri!query(pagingInfo: local!pInfo)
+        )
+      )
+    ),
+    /* Refresh query on change of certain configurations to allow dynamic behavior */
+    refreshOnVarChange: {
+      local!startIndex,
+      ri!pageSize,
+      ri!sort,
+      ri!ignoreColumns,
+      ri!report,
+      ri!contextGroups,
+      ri!contextProcessIds,
+      ri!contextProcessModels,
+      ri!contextUsers,
+      ri!query,
+      ri!refreshInterval,
+      /*
+        User needs to tell the component on which variables to react when
+        external filters are used. This is also needed to automatically reset
+        the start index to 1
+      */
+      ri!refreshOnVarChange,
+    },
+    refreshInterval: if(
+      isnull(ri!refreshInterval),
+      null,
+      ri!refreshInterval
+    )
+  ),
+
+  /* Store column config keys once and not inside foreach */
+  local!coCoValidChars: "_abcdefghijklmnopqrstuvwxyz0123456789",
+  local!coCoKeys: touniformstring(index(ri!columnConfig, "column", {})),
+  local!coCoKeysLower: cleanwith(lower(local!coCoKeys), local!coCoValidChars),
+
+  {
+    a!boxLayout(
+      label: "DISPLAY PROCESS REPORT DEBUG",
+      style: "ERROR",
+      contents: {
+        a!richTextDisplayField(
+          value: tostring(local!data)
+        )
+      },
+      showWhen: ri!debug = true,
+      marginBelow: "STANDARD"
+    ),
+    a!gridField(
+      label: ri!label,
+      instructions: ri!instructions,
+      labelPosition: if(isnull(ri!label), "COLLAPSED", "ABOVE"),
+      emptyGridMessage: ri!emptyGridMessage,
+      showWhen: and(
+        ri!showWhen <> false,
+        ri!debug <> true
+      ),
+      shadeAlternateRows: ri!shadeAlternateRows <> false,
+      spacing: ri!spacing,
+      height: ri!height,
+      borderStyle: ri!borderStyle,
+      pagingSaveInto: {
+        a!save(
+          target: local!startIndex,
+          value: fv!pagingInfo.startIndex
+        ),
+        local!pInfo,
+        a!save(
+          target: ri!sortSaveInto,
+          value: local!pInfo.sort
+        )
+      },
+      selectable: ri!selectable,
+      selectionStyle: ri!selectionStyle,
+      selectionValue: ri!selectionValue,
+      selectionSaveInto: ri!selectionSaveInto,
+      selectionRequired: if(
+        ri!selectable,
+        ri!selectionRequired,
+        null,
+      ),
+      selectionRequiredMessage: ri!selectionRequiredMessage,
+      rowHeader: ri!rowHeader,
+      accessibilityText: ri!accessibilityText,
+      validationGroup: ri!validationGroup,
+      data: if(
+        tointeger(local!data.totalCount) > 0,
+        local!data,
+        {}
+      ),
+      /* Use validations to show issues in component configuration */
+      validations: {
+        if(
+          isnull(local!data.errorMessage),
+          null,
+          local!data.errorMessage
+        ),
+        if(
+          and(
+            contains(touniformstring(index(local!data.columnConfigs, "configuredDrilldown", {})), "DASHBOARD"),
+            isnull(ri!recordDashboardFunction)
+          ),
+          "Drilldown to dashboard is defined but ri!recordDashboardFunction is NULL. Provide an expression to create recordLinks.",
+          null
+        ),
+        if(
+          isnull(ri!report),
+          "Value for report missing",
+          null
+        ),
+        if(
+          ri!showImplementationHelp = true,
+          "Make sure to hide help as you complete implementation!",
+          null
+        )
+      },
+      columns: if(
+        or(
+          isnull(local!data.columnConfigs),
+          local!data.totalCount = 0
+        ),
+        a!gridColumn(),
+        a!forEach(
+          /* Ignore columns listed in ri!ignoreColumns */
+          items: remove(local!data.columnConfigs, wherecontains(ri!ignoreColumns, touniformstring(local!data.columnConfigs.field))),
+          expression: a!localVariables(
+            local!links: a!refreshVariable(
+              value: choose(
+                lookup(local!drilldownTypes, fv!item.configuredDrilldown, 0) + 1,
+                null,
+
+                /* Task links: Use taskLinkFunction to create links pointing to a site */
+                if(
+                  isnull(ri!taskLinkFunction),
+                  a!forEach(
+                    items: index(local!data.data, fv!item.drilldownField, {}),
+                    expression: a!processTaskLink(task: fv!item)
+                  ),
+                  a!forEach(
+                    items: index(local!data.data, fv!item.drilldownField, {}),
+                    expression: ri!taskLinkFunction(fv!item)
+                  )
+                ),
+
+                /* User record links */
+                a!forEach(
+                  items: index(local!data.data, fv!item.drilldownField, {}),
+                  expression: a!userRecordLink(user: fv!item)
+                ),
+
+                /* Document download links */
+                a!forEach(
+                  items: index(local!data.data, fv!item.drilldownField, {}),
+                  expression: a!documentDownloadLink(document: tointeger(fv!item))
+                ),
+
+                /* Record dashboard links */
+                if(
+                  isnull(ri!recordDashboardFunction),
+                  {},
+                  a!forEach(
+                    items: local!data.data,
+                    expression: ri!recordDashboardFunction(fv!item)
+                  )
+                )
+              ),
+              refreshAlways: true
+            ),
+
+            /*
+              Prepare column labels
+              Need to replace some characters for proper display
+            */
+            local!columnLabelClean: reduce(
+              fn!substitute(_,_,_),
+              fv!item.label,
+              merge(
+                {"&amp;", "&lt;", "&gt;"},
+                {"&", "<", ">"}
+              )
+            ),
+            local!columnLabel: if(
+              len(local!columnLabelClean) > 3,
+              local!columnLabelClean, /* Temporary, but potentially permanent change. - Sometimes we have abbreviations in longer labels */
+              local!columnLabelClean
+            ),
+
+            /*
+              Determine column specific configuration
+              Can use (in this order)
+                - column label like "started by"
+                - column name like "c3"
+                - column formatting name like "priority"
+              Some extra effort to allow case insensitive keys
+              Column formatting is all UPPERCASE, but in the
+              dictionary we want to be a bit more flexible
+
+              Searching case insensitive in column names for values: field label, field name, field type
+            */
+            local!coCo: index(
+              displayvalue(
+                cleanwith(lower(local!columnLabelClean), local!coCoValidChars),
+                local!coCoKeysLower,
+                ri!columnConfig,
+                displayvalue(
+                  cleanwith(lower(fv!item.field), local!coCoValidChars),
+                  local!coCoKeysLower,
+                  ri!columnConfig,
+                  displayvalue(
+                    cleanwith(lower(fv!item.configuredFormatting), local!coCoValidChars),
+                    local!coCoKeysLower,
+                    ri!columnConfig,
+                    null
+                  )
+                )
+              ),
+              "config",
+              null
+            ),
+
+            local!displayFunction: index(
+              local!coCo,
+              "displayRule",
+              null
+            ),
+
+            /*
+              Determine column width
+              Each column type has its own default value
+            */
+            local!columnWidth: index(
+              local!coCo,
+              "width",
+              null
+            ),
+
+            /*
+              Determine column sort field
+            */
+            local!sortField: index(
+              local!coCo,
+              "sortField",
+              fv!item.field
+            ),
+
+            /*
+              Determine column tooltips
+            */
+            local!tooltip: if(
+              ri!showReportColumnInfo,
+              tostring({
+                columnConfig: fv!item,
+                displayFunction: if(isnull(local!displayFunction), "DEFAULT", local!displayFunction),
+                width: if(isnull(local!columnWidth), "DEFAULT", local!columnWidth),
+                tooltip: index(local!coCo, "tooltip", "NONE")
+              }),
+              index(
+                local!coCo,
+                "tooltip",
+                null
+              ),
+            ),
+
+            /* Finally render the column by its defined formatting type */
+            choose(
+              lookup(local!fieldTypes, fv!item.configuredFormatting, 1),
+
+              /* NORMAL_TEXT*/
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: fv!row[fv!item.field],
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* USER_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!forEach(
+                        items: fv!row[fv!item.field],
+                        expression: a!richTextItem(
+                          text: concat(
+                            user(fv!item, "firstName") & " " & user(fv!item, "lastName"),
+                            if(fv!isLast, "", ", ")
+                          ),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* DATE_TIME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: tostring(fv!row[fv!item.field]),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* DURATION */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!localVariables(
+                      local!parts: tointeger(split(fv!row[fv!item.field], ":")),
+                      local!names: {"Day", "", "Hour", "Minute", "Second"},
+                      a!richTextDisplayField(
+                        preventWrapping: true,
+                        value: a!richTextItem(
+                          text: if(
+                            count(local!parts) <> 5,
+                            null,
+                            joinarray(
+                              a!forEach(
+                                items: {1,3},
+                                expression: if(
+                                  local!parts[fv!item] > 0,
+                                  concat(
+                                    local!parts[fv!item],
+                                    " ",
+                                    local!names[fv!item],
+                                    if(
+                                      local!parts[fv!item] > 1,
+                                      "s",
+                                      ""
+                                    )
+                                  ),
+                                  {}
+                                )
+                              ),
+                              ", "
+                            )
+                          ),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* NUMBER */
+              a!gridColumn(
+                label: local!columnLabel,
+                align: "END",
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                sortField: local!sortField,
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: tostring(fv!row[fv!item.field]),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* NUMBER_ROUNDED */
+              a!gridColumn(
+                label: local!columnLabel,
+                align: "END",
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: fixed(fv!row[fv!item.field], 2),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* DATE */
+              a!gridColumn(
+                label: local!columnLabel,
+                align: "END",
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: tostring(todate(fv!row[fv!item.field])),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* TIME */
+              a!gridColumn(
+                label: local!columnLabel,
+                align: "END",
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: text(fv!row[fv!item.field], "hh:mm"),
+                        linkStyle: "STANDALONE",
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* BOOLEAN */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "NARROW", local!columnWidth),
+                helpTooltip: local!tooltip,
+                align: "CENTER",
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!imageField(
+                      align: "CENTER",
+                      images: a!documentImage(
+                        document: if(
+                          fv!row[fv!item.field],
+                          a!iconIndicator("STATUS_OK"),
+                          a!iconIndicator("STATUS_NOTDONE")
+                        ),
+                        caption: if(
+                          fv!row[fv!item.field],
+                          "Yes",
+                          "No"
+                        ),
+                        altText: if(
+                          fv!row[fv!item.field],
+                          "Yes",
+                          "No"
+                        ),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PERCENTAGE */
+              a!gridColumn(
+                label: local!columnLabel,
+                align: "END",
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: concat(
+                          fv!row[fv!item.field],
+                          " %"
+                        ),
+                        linkStyle: "STANDALONE",
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PROCESS_MODEL_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: fv!row[fv!item.field],
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PROCESS_STATUS */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: index(
+                          local!processStatuses,
+                          1 + tointeger(fv!row[fv!item.field]),
+                          "Unknown"
+                        ),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PROCESS_STATUS_ICON */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                align: "CENTER",
+                width: if(isnull(local!columnWidth), "NARROW", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!imageField(
+                      align: "CENTER",
+                      images: choose(
+                        1 + tointeger(fv!row[fv!item.field]),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "PROGRESS_RUNNING" ),
+                          altText: index(local!processStatuses, 1, ""),
+                          caption: index(local!processStatuses, 1, ""),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "STATUS_OK" ),
+                          altText: index(local!processStatuses, 2, ""),
+                          caption: index(local!processStatuses, 2, ""),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "PROGRESS_PAUSED" ),
+                          altText: index(local!processStatuses, 3, ""),
+                          caption: index(local!processStatuses, 3, ""),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "STATUS_NOTDONE" ),
+                          altText: index(local!processStatuses, 4, ""),
+                          caption: index(local!processStatuses, 4, ""),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "STATUS_ERROR" ),
+                          altText: index(local!processStatuses, 5, ""),
+                          caption: index(local!processStatuses, 5, ""),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* TASK_STATUS */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: index(
+                          local!taskStatuses,
+                          tointeger(fv!row[fv!item.field]) + 1,
+                          "---"
+                        ),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PRIORITY */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "ICON", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: index(local!priorities, tointeger(fv!row[fv!item.field]) + 1, {}),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PRIORITY_ICON */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "NARROW", local!columnWidth),
+                helpTooltip: local!tooltip,
+                align: "CENTER",
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!imageField(
+                      images: choose(
+                        1 + fv!row[fv!item.field],
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "TREND_DOWN_BAD" ),
+                          altText: local!priorities[1],
+                          caption: local!priorities[1],
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "TREND_FLAT" ),
+                          altText: local!priorities[2],
+                          caption: local!priorities[2],
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        ),
+                        a!documentImage(
+                          document: a!iconIndicator( icon: "TREND_UP_GOOD" ),
+                          altText: local!priorities[3],
+                          caption: local!priorities[3],
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* THRESHOLD */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: tostring(fv!row[fv!item.field]),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* PROCESS_MODEL_VERSION */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!richTextItem(
+                        text: fv!row[fv!item.field],
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* USER_PHOTO */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "ICON_PLUS", local!columnWidth),
+                align: "CENTER",
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!imageField(
+                      style: "AVATAR",
+                      size: "TINY",
+                      images: a!forEach(
+                        items: fv!row[fv!item.field],
+                        expression: a!localVariables(
+                          local!caption: user(fv!item, "firstName") & " " & user(fv!item, "lastName"),
+                          a!userImage(
+                            user: fv!item,
+                            altText: local!caption,
+                            caption: local!caption,
+                            link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                          )
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* GROUP_PROFILE */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      value: a!forEach(
+                        items: fv!row[fv!item.field],
+                        expression: a!richTextItem(
+                          text: concat(
+                            group(fv!item, "groupName"),
+                            if(fv!isLast, "", ", ")
+                          ),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* USER_OR_GROUP_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!forEach(
+                        items: fv!row[fv!item.field],
+                        expression: a!richTextItem(
+                          text: concat(
+                            if(
+                              runtimetypeof(fv!item) = 'type!{http://www.appian.com/ae/types/2009}Group',
+                              group(fv!item, "groupName"),
+                              user(fv!item, "firstName") & " " & user(fv!item, "lastName")
+                            ),
+                            if(fv!isLast, "", ", ")
+                          ),
+                          link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* USER_EMAIL */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!forEach(
+                        items: fv!row[fv!item.field],
+                        expression: a!richTextItem(
+                          text: concat(
+                            user(tostring(fv!item), "email"),
+                            if(fv!isLast, "", ", ")
+                          ),
+                          link: a!safeLink(uri: "mailto:" & user(tostring(fv!item), "email"))
+                        )
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* DOCUMENT_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: if(
+                          isnull(fv!row[fv!item.field]),
+                          null,
+                          concat(
+                            document(tointeger(fv!row[fv!item.field]), "name"),
+                            ".",
+                            document(tointeger(fv!row[fv!item.field]), "extension")
+                          )
+                        ),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* FOLDER_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: folder(tointeger(fv!row[fv!item.field]), "name"),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* DOCUMENT_OR_FOLDER_NAME */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                helpTooltip: local!tooltip,
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!richTextDisplayField(
+                      preventWrapping: true,
+                      value: a!richTextItem(
+                        text: if(
+                          runtimetypeof(fv!row[fv!item.field]) = 'type!{http://www.appian.com/ae/types/2009}Group',
+                          folder(tointeger(fv!row[fv!item.field]), "name"),
+                          concat(
+                            document(tointeger(fv!row[fv!item.field]), "name"),
+                            ".",
+                            document(tointeger(fv!row[fv!item.field]), "extension")
+                          )
+                        ),
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              ),
+
+              /* IMAGE */
+              a!gridColumn(
+                label: local!columnLabel,
+                sortField: local!sortField,
+                align: "CENTER",
+                helpTooltip: local!tooltip,
+                width: if(isnull(local!columnWidth), "AUTO", local!columnWidth),
+                value: if(
+                  isnull(fv!row[fv!item.field]),
+                  null,
+                  if(
+                    isnull(local!displayFunction),
+                    a!imageField(
+                      images: a!documentImage(
+                        document: fv!row[fv!item.field],
+                        link: displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      ),
+                      size: if(
+                        isnull(ri!imageColumnSize),
+                        "SMALL",
+                        ri!imageColumnSize
+                      ),
+                      isThumbnail: true
+                    ),
+                    if(
+                      isnull(local!links),
+                      local!displayFunction(
+                        fv!row[fv!item.field]
+                      ),
+                      local!displayFunction(
+                        fv!row[fv!item.field],
+                        displayvalue(fv!identifier, local!data.identifiers, local!links, null)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    a!boxLayout(
+      label: "Implementation Help",
+      style: "INFO",
+      showWhen: or(
+        ri!showImplementationHelp = true,
+        isnull(ri!report)
+      ),
+      contents: {
+        a!richTextDisplayField(
+          labelPosition: "COLLAPSED",
+          instructions: "Starred parameters are required depending on report context type",
+          value: {
+            a!richTextHeader(
+              text: "PARAMETERS"
+            ),
+          }
+        ),
+        a!forEach(
+          items: {
+            {name: "report *", description: "cons!YOUR_CONSTANT_POINTING_TO_PROCESS_REPORT_DOCUMENT"},
+            {name: "contextGroups (*)", description: "One or more groups if your report has a group context"},
+            {name: "contextProcessIds (*)", description: "One or more process ids if your report has a process context"},
+            {name: "contextProcessModels (*)", description: "One or more process model ids if your report has a process model context"},
+            {name: "contextUsers (*)", description: "One or more users if your report has a user context"},
+            {name: "debug", description: "Set to true to see the raw output of queryProcessAnalytics()"},
+            {name: "showReportColumnInfo", description: "Set to true to see column config details as tooltips"},
+            {name: "columnConfig", description: "Is an optional dictionary allowing you to configure behavior of individual columns. See below for details and examples."},
+            {name: "pageSize", description: "The maximum number of rows to display in the grid. Default: 15"},
+            {name: "sort", description: "Sorts applied to the grid upon initial load only. The first sort in this list will be displayed to the user as an arrow in the header of the corresponding grid column (if applicable)."},
+            {name: "query", description: "An optional query object containing paging and filtering information, created with a!query(). If no query is provided, the default paging from the report will be used. PagingInfo is managed from the grid and must be passed as ""_"". Field names must be passed as ""c*"". Example: a!query(filter: a!queryFilter(field: ""c0"", operator: ""includes"", value: local!search), pagingInfo:_)"},
+            {name: "label", description: "Text to display as the grid label."},
+            {name: "emptyGridMessage", description: "Text to display in the grid when no data is available. Default is “No items available”."},
+            {name: "showWhen", description: "Determines whether the component is displayed on the interface. When set to false, the component is hidden and is not evaluated. Default: true."},
+            {name: "shadeAlternateRows", description: "Determines whether alternate rows are shaded. Default: true."},
+            {name: "spacing", description: "Determines the spacing within grid cells. Valid values: “STANDARD” (default), “DENSE”."},
+            {name: "height", description: "Determines height of the grid. Valid values: “SHORT”, “MEDIUM”, “TALL”, “AUTO” (default). When it is set to SHORT, MEDIUM, or TALL, the header is frozen."},
+            {name: "borderStyle", description: "Determines the style of the grid border. Valid values: “STANDARD” (default), “LIGHT”."},
+            {name: "taskLinkFunction", description: "Reference to an expression rule which is called to create the link to a task. Only applies to columns with a drill down configured as “Task Details”"},
+            {name: "imageColumnSize", description: "Determines how the images are sized. Valid values: “ICON”, “GALLERY”, “TINY”, “SMALL”, “MEDIUM” (default), “LARGE”, “FIT”."},
+            {name: "recordDashboardFunction", description: "Reference to an expression rule which is called to create the link to a record. Only applies to columns with a drill down configured as “Dashboard”"},
+            {name: "instructions", description: "Supplemental text about this grid."},
+            {name: "processStatusLabels", description: "Labels used to display process status. Must be 12 items."},
+            {name: "taskStatusLabels", description: "Labels used to display task status. Must be 5 items."},
+            {name: "priorityLabels", description: "Labels to display priority. Must be 3 items."},
+            {name: "ignoreColumns", description: "Can be used to hide columns. Syntax is: {“c2”, “c4”, “c7”}. Enable parameter “showReportColumnInfo” to see column info."},
+            {name: "refreshOnVarChange", description: "Refreshes the value of the local variable each time any of these specific variables change. This allows you to refresh the value when a variable that is not referenced within the value parameter is updated. You can define either using a single variable (e.g. refreshOnVarChange: local!var1) or a list of variables (e.g. refreshOnVarChange: {local!var1, local!var2})."},
+            {name: "selectable", description: "Determines if grid rows are selectable. When selection style is “CHECKBOX” (default), the selection column is displayed. Default: false."},
+            {name: "selectionStyle", description: "Determines the style when a row is selected. Valid values: “CHECKBOX” (default), “ROW_HIGHLIGHT”."},
+            {name: "selectionSaveInto", description: "One or more variables that are updated with the selected identifiers when the user changes selections. Use a!save() to save a modified or alternative value to a variable. You can reference the rows selected and deselected in the most recent user interaction (not all selected or deselected rows) using fv!selectedRows and fv!deselectedRows respectively."},
+            {name: "selectionValue", description: "Identifiers of the rows that should appear as selected. Can be set to have rows be pre-selected for the user. Supported types: Text Array and Integer Array."},
+            {name: "selectionRequired", description: "Determines if a selection is required to submit the form. Default: false."},
+            {name: "selectionRequiredMessage", description: "Custom message to display when a selection is required and not provided."},
+            {name: "refreshInterval", description: "How often the variable value gets refreshed in minutes. When null, the variable will not be refreshed on an interval. Because the variable is periodically refreshed, you cannot update its value by saving into it. You can access the current value of the variable using fv!value (see the documentation for an example). Valid values: 0.5, 1, 2, 3, 4, 5, 10, 30, 60."},
+            {name: "showImplementationHelp", description: "Enable this help. In case parameter “report” is null, this help is shown as well."},
+            {name: "rowHeader", description: "Index of the column to be used as the row header. Screen readers will announce the value in each row header when navigating to other cells within that row. Used only for accessibility; produces no visible change."},
+            {name: "accessibilityText", description: "Additional text to be announced by screen readers. Used only for accessibility; produces no visible change."},
+            {name: "validationGroup", description: "When present, this field is only validated when a button in the same validation group is pressed."},
+            {name: "sortSaveInto", description: "One or more variables that are updated only when user invokes a sorting action on the grid."},
+          },
+          expression: a!richTextDisplayField(
+            label: fv!item.name,
+            labelPosition: "JUSTIFIED",
+            value: fv!item.description
+          )
+        ),
+        a!richTextDisplayField(
+          labelPosition:  "COLLAPSED",
+          value: {
+            a!richTextHeader(
+              text: "REPORT COLUMNS"
+            ),
+          }
+        ),
+        a!gridField(
+          labelPosition: "COLLAPSED",
+          showWhen: a!isNotNullOrEmpty(local!data.columnConfigs),
+          data: todatasubset(local!data.columnConfigs, fv!pagingInfo),
+          pageSize: 1000,
+          initialSorts: a!sortInfo(
+            field: "label",
+            ascending: true
+          ),
+          spacing: "DENSE",
+          borderStyle: "LIGHT",
+          columns: {
+            a!gridColumn(
+              label: "Field",
+              sortField: "label",
+              value: reduce(
+                fn!substitute(_,_,_),
+                fv!row.label,
+                merge(
+                  {"&amp;", "&lt;", "&gt;"},
+                  {"&", "<", ">"}
+                )
+              ),
+            ),
+            a!gridColumn(
+              label: "C-Number",
+              sortField: "field",
+              value: fv!row.field
+            ),
+            a!gridColumn(
+              label: "Formatting",
+              sortField: "configuredFormatting",
+              value: fv!row.configuredFormatting
+            ),
+            a!gridColumn(
+              label: "Drilldown",
+              sortField: "configuredDrilldown",
+              value: fv!row.configuredDrilldown
+            ),
+          }
+        ),
+        a!richTextDisplayField(
+          labelPosition:  "COLLAPSED",
+          value: {
+            a!richTextHeader(
+              text: "COLUMN CONFIG DETAILS"
+            ),
+            joinarray(
+              {
+                "{",
+                "  {",
+                "    column: <ColumnLabel / ColumnName / ColumnField> (Case insensitive),",
+                "    config: {",
+                "      width: <Valid value for column width> ""AUTO"", ""ICON"", ""ICON_PLUS"", ""NARROW"", ""NARROW_PLUS"", ""MEDIUM"", ""MEDIUM_PLUS"", ""WIDE"", ""1X"", ""2X"", ""3X"", ""4X"", ""5X"", ""6X"", ""7X"", ""8X"", ""9X"", and ""10X""",
+                "      tooltip: Text displayed as tooltip,",
+                "      sortField: Define another field to sort by when clicking the column header. Use the c* notation.",
+                "      displayRule: A reference to an expression which is called for each cell in the column",
+                "        This expression needs to have at least one rule input of any name which takes the cell value. If a drill down is configured, the created link is passed as a second parameter.",
+                "        Can return just some text or any other field type valid inside a grid.",
+                "        For Appian 20.3 this is a!imageField(), a!linkField(), a!richTextDisplayField(), a!tagField(), a!buttonArrayLayout(), a!recordActionField(), or a!progressBarField().",
+                "    }",
+                "  }",
+                "}",
+              },
+              char(10)
+            ),
+            a!richTextHeader(
+              text: "EXAMPLES",
+              size: "SMALL",
+            ),
+            joinarray(
+              {
+                "{",
+                "  /* All parameters defined */",
+                "  {",
+                "    column: ""prio"",",
+                "    config: {",
+                "      width: ""WIDE"",",
+                "      tooltip: ""My fancy tooltip"",",
+                "      displayRule: rule!SAS_DR_Priority(value:_, link:_)",
+                "    }",
+                "  },",
+                " ",
+                "  /* Field label with spaces can be used, and all parameters are optional",
+                "  Valid special characters are space, &, - */",
+                "  {",
+                "    column: ""Model Name"",",
+                "    config: {",
+                "      width: ""5X""",
+                "    }",
+                "  },",
+                " ",
+                "  /* Use field names as in result of queryProcessAnalytics */",
+                "  {",
+                "    column: ""c8"",",
+                "    config: {",
+                "      tooltip: ""My C8 tooltip""",
+                "    }",
+                "  },",
+                " ",
+                "  /* Use column configuration names to control rendering for all columns of this type */",
+                "  /* Values used in this report: " & joinarray(union(touniformstring(index(local!data.columnConfigs, "configuredFormatting", {})), touniformstring({})), ", ") & " */",
+                "  /* Valid values: " & joinarray(local!fieldTypes, ", ") & " */",
+                "  {",
+                "    column: ""PROCESS_STATUS_ICON"",",
+                "    config: {",
+                "      displayRule: rule!MyProcessStatusconRule",
+                "    }",
+                "  }",
+                "}",
+              },
+              char(10)
+            ),
+            a!richTextHeader(
+              text: "DETAILS",
+              size: "SMALL",
+            ),
+            "Definitions in columnConfig are evaluated in following order",
+            a!richTextNumberedList(
+              items: {
+                "Field label like ""Status"" or ""Task Name""",
+                "Field name like ""c0"" to ""c99""",
+                "Field type like " & joinarray(local!fieldTypes, ", "),
+              }
+            ),
+            "This means that you can have a generic configuration for a field type but still make a specific field behave different",
+          }
+        )
+      }
+    )
+  }
+)
