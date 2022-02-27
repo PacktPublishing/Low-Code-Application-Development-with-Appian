@@ -1,0 +1,73 @@
+IVP_C_DropDownField
+
+Rule Inputs:
+label (Text)
+labelPosition (Text)
+instructions (Text)
+required (Boolean)
+disabled (Boolean)
+choiceLabels (Text List)
+choiceValues (Any)
+placeholder (Text)
+value (Any)
+validations (Text List)
+saveInto (Save List)
+validationGroup (Text)
+requiredMessage (Text)
+helpTooltip (Text)
+accessibilityText (Text)
+showWhen (Boolean)
+
+if(
+  ri!readOnly,
+  a!textField(
+    label: ri!label,
+    readOnly: true,
+    instructions: ri!instructions,
+    labelPosition: if(
+      isnull(ri!labelPosition),
+      "JUSTIFIED",
+      ri!labelPosition
+    ),
+    value: displayvalue(ri!value, ri!choiceValues, ri!choiceLabels, null),
+    helpTooltip: ri!helpTooltip,
+    showWhen: ri!showWhen <> false, /* Defaults to true */
+    accessibilityText: ri!accessibilityText,
+  ),
+  a!localVariables(
+    local!valueIsValid: and(
+      runtimetypeof(ri!value) = runtimetypeof(index(ri!choiceValues, 1, null)),
+      lookup(ri!choiceValues, ri!value, 0) > 0
+    ),
+    a!dropdownField(
+      label: ri!label,
+      labelPosition: if(isnull(ri!labelPosition),
+        "ABOVE",
+        ri!labelPosition
+      ),
+      instructions: ri!instructions,
+      required: ri!required,
+      disabled: ri!disabled,
+      choiceLabels: ri!choiceLabels,
+      choiceValues: ri!choiceValues,
+      placeholder: if(
+        and(or(isnull(ri!value), not(local!valueIsValid)), isnull(ri!placeholder)),
+        "--- " & ri!label & " ---",
+        ri!placeholder
+      ),
+      value: if(
+        or(isnull(ri!value), not(local!valueIsValid), isnull(ri!choiceValues)),
+        null,
+        ri!value
+      ),
+      validations: ri!validations,
+      saveInto: ri!saveInto,
+      validationGroup: ri!validationGroup,
+      requiredMessage: ri!requiredMessage,
+      helpTooltip: ri!helpTooltip,
+      showWhen: ri!showWhen <> false, /* Defaults to true */
+      accessibilityText: ri!accessibilityText,
+      searchDisplay: "ON"
+    )
+  )
+)
