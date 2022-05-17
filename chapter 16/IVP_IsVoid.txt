@@ -33,6 +33,15 @@ if(
       /* List has zero non-null items, length() already ignores null values*/
       length(a!flatten(ri!value)) = 0,
 
+    /* Map */
+    if(
+      local!typeNum = 'type!{http://www.appian.com/ae/types/2009}Map',
+      /* Has no keys at all or all values are null */
+      or(
+        length(a!keys(ri!value)) = 0,
+        all(a!isNullOrEmpty(_), index(ri!value, a!keys(ri!value), null))
+      ),
+      
     /* DataSubsets or Maps returned by queryRecordType */
     if(
       or(
@@ -46,6 +55,6 @@ if(
 
       /* No idea what this could be so it is considered to not be null */
       false
-    ))))
+    )))))
   )
 )
